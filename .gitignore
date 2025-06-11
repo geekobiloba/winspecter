@@ -1,0 +1,7 @@
+.DS_Store
+[Tt]humbs.db
+**.exe
+**.html
+**.syso
+.idea/
+tmp/
