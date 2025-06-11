@@ -81,12 +81,12 @@ func main() {
 
 	switch {
 
-	// Handle "naked" or invalid args
-	case len(flag.Args()) > 0:
+	// Handle absent and "naked" or invalid, args
+	case selectedAction == "", len(flag.Args()) > 0:
 		flag.Usage()
 		return
 
-	// Print version without collecting specs
+	// Print version
 	case selectedAction == "version":
 		fmt.Printf("Winspecter v%s\n", Version)
 		return
@@ -137,6 +137,7 @@ func main() {
 	case "vcsv":
 		fmt.Println(s.TextVCSV(*delim, *quote))
 
+	// Just in case
 	default:
 		flag.Usage()
 	}

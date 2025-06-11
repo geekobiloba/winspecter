@@ -56,8 +56,8 @@ So, you need to configure your editor to recognize them.
 >   ignore `gopls` complaint about "main redeclared in this block"
 >   in `cli.go` and `gui.go`.
 >
->   GoLand stays cool about it,
->   and correctly recognizes the separate main.
+>   GoLand, on the other hand, stays cool about it,
+>   and correctly recognizes the separate mains.
 
 ### Neovim
 

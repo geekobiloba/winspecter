@@ -5,17 +5,16 @@
 BIN_GUI := winspecter.exe
 BIN_CLI := winspecter-cli.exe
 BIN     := $(BIN_CLI) $(BIN_GUI)
-GOFILES_CLI := main.go collector.go stringer.go table.go cli.go text.go marshaler.go
-GOFILES_GUI := main.go collector.go stringer.go table.go gui.go html.go
 TMPL := assets/html.tmpl
 CSS  := assets/style.css
 JS   := assets/script.js
 COFF := rsrc_windows_amd64.syso
 ICON := assets/favicon.ico
 LOGO := assets/winspecter.png
+GOFILES_CLI := main.go collector.go stringer.go table.go cli.go text.go marshaler.go
+GOFILES_GUI := main.go collector.go stringer.go table.go gui.go html.go
 
 .PHONY: all
-#all: $(BIN_CLI) $(BIN_GUI)
 all: $(BIN)
 
 $(BIN_CLI): $(GOFILES_CLI) $(ICON) $(COFF)
