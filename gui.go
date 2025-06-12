@@ -3,8 +3,8 @@
 package main
 
 import (
-	"syscall"
 	"golang.org/x/sys/windows"
+	"syscall"
 )
 
 func main() {
@@ -24,8 +24,8 @@ func main() {
 }
 
 func errorBox(err error) {
-	title,   _ := syscall.UTF16PtrFromString(err.Error())
+	title, _ := syscall.UTF16PtrFromString(err.Error())
 	message, _ := syscall.UTF16PtrFromString("Winspector Error")
 
-	windows.MessageBox(0, title, message, windows.MB_OK|windows.MB_ICONERROR)
+	_, _ = windows.MessageBox(0, title, message, windows.MB_OK|windows.MB_ICONERROR)
 }
