@@ -2,5 +2,5 @@
 
 package main
 
-var Version = "0.1"
+const Version = "0.1"
 
