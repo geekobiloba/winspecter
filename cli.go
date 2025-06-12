@@ -81,7 +81,7 @@ func main() {
 
 	switch {
 
-	// Handle absent and "naked" or invalid, args
+	// Handle absent and "naked" or invalid args
 	case selectedAction == "", len(flag.Args()) > 0:
 		flag.Usage()
 		return

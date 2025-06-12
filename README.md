@@ -20,18 +20,18 @@ it comprises of two tiny tools:
 
 ##  How to build
 
-1.  Install Go and GNU Make,
+1.  Install Go, GNU Make, and UPX,
 
     -   using WinGet,
 
         ```shell
-        winget install GoLang.Go ezwinports.make
+        winget install GoLang.Go ezwinports.make UPX.UPX
         ```
 
     -   or [scoop](https://scoop.sh/),
 
         ```shell
-        scoop install go make
+        scoop install go make upx
         ```
 
 2.  Install `rsrc`,
