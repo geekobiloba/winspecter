@@ -14,19 +14,25 @@ LOGO := assets/winspecter.png
 GOFILES_CLI := main.go collector.go string.go table.go cli.go text.go serial.go
 GOFILES_GUI := main.go collector.go string.go table.go gui.go html.go
 
-.PHONY: all
+.PHONY: all cli gui build vet tidy fmt clean realclean clean realclean
+
 all: $(BIN)
 
-$(BIN_CLI): $(GOFILES_CLI) $(ICON) $(COFF)
+cli: $(BIN_CLI)
+
+$(BIN_CLI): $(GOFILES_CLI) $(COFF)
 	go mod tidy
 	go vet ./...
 	go build -tags=cli -o $(BIN_CLI) -ldflags "-s -w" --trimpath -buildvcs=false .
 	upx --force-overwrite --best --lzma $@
 
+gui: $(BIN_GUI)
+
+# See gui.go for the reason why we include the ignored tag here.
 $(BIN_GUI): $(GOFILES_GUI) $(TMPL) $(CSS) $(JS) $(ICON) $(COFF)
 	go mod tidy
 	go vet ./...
-	go build -tags=gui -o $(BIN_GUI) -ldflags "-s -w -H=windowsgui" --trimpath -buildvcs=false .
+	go build -tags=gui,ignored -o $(BIN_GUI) -ldflags "-s -w -H=windowsgui" --trimpath -buildvcs=false .
 	upx --force-overwrite --best --lzma $@
 
 $(COFF): $(ICON)
@@ -35,46 +41,35 @@ $(COFF): $(ICON)
 $(ICON): $(LOGO)
 	magick -define icon:auto-resize=256,128,64,48,32,16 $< $@
 
-.PHONY: build
 build: vet
 	go build -tags=cli -o $(BIN_CLI) -ldflags "-s -w" --trimpath -buildvcs=false .
-	go build -tags=gui -o $(BIN_GUI) -ldflags "-s -w -H=windowsgui" --trimpath -buildvcs=false .
+	go build -tags=gui,ignored -o $(BIN_GUI) -ldflags "-s -w -H=windowsgui" --trimpath -buildvcs=false .
 	upx --force-overwrite --best --lzma $(BIN_CLI)
 	upx --force-overwrite --best --lzma $(BIN_GUI)
 
-.PHONY: vet
 vet: tidy
 	go vet ./...
 
-.PHONY: tidy
 tidy:
 	go mod tidy
 
-.PHONY: fmt
 fmt:
 	go fmt ./...
 
-
-ifeq ($(OS),Windows_NT)
-
-.PHONY: clean
 clean:
+ifeq ($(OS),Windows_NT)
 	powershell.exe -NoProfile -Command \
 		"Remove-Item -Force -ErrorAction Ignore *.html"
 
-.PHONY: realclean
+else
+	rm -f *.html
+endif
+
 realclean: clean
+ifeq ($(OS),Windows_NT)
 	powershell.exe -NoProfile -Command \
 		"Remove-Item -Force -ErrorAction Ignore *.exe, *.syso"
-
 else
-
-.PHONY: clean
-clean:
-	rm -f *.html
-
-.PHONY: realclean
-realclean: clean
 	rm -f *.exe *.syso
 
 endif

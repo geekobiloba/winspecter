@@ -6,3 +6,7 @@ vim.lsp.config.gopls = {
   }
 }
 
+if type(vim.cmd.OutlineOpen) == 'function' then
+	vim.cmd.OutlineOpen()
+end
+

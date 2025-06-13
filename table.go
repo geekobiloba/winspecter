@@ -7,13 +7,13 @@ import (
 	"reflect"
 )
 
+// Table
 // Convert the specs struct as a 2-column table for later processing.
 // If pretty is true, indentation is added to the first column
 // for easier pretty printing.
 // Otherwise, the struct is flattened to make a transposed CSV.
 // Normal CSV creation, its column delimiter and quote character
-// should be handled by the consumer.
-
+// should be handled by the caller.
 func (s *Specs) Table(data any, pretty bool, a int, label ...string) (z [][]string) {
 	t := reflect.TypeOf(data)
 	v := reflect.ValueOf(data)
@@ -33,7 +33,7 @@ func (s *Specs) Table(data any, pretty bool, a int, label ...string) (z [][]stri
 	}
 
 	if t.Kind() != reflect.Struct {
-		return
+		return z
 	}
 
 	for i := range t.NumField() {
@@ -51,7 +51,7 @@ func (s *Specs) Table(data any, pretty bool, a int, label ...string) (z [][]stri
 				a, l = 0, key.Name+" "
 			}
 
-			// mind the elipsis ...
+			// mind the ellipsis ...
 			z = append(z, s.Table(val.Interface(), pretty, a, l)...)
 
 		case reflect.Slice:
@@ -74,7 +74,7 @@ func (s *Specs) Table(data any, pretty bool, a int, label ...string) (z [][]stri
 					a, l = b, l+" "
 				}
 
-				// mind the elipsis ...
+				// mind the ellipsis ...
 				z = append(z, s.Table(val.Index(j).Interface(), pretty, a, l)...)
 			}
 
@@ -83,9 +83,9 @@ func (s *Specs) Table(data any, pretty bool, a int, label ...string) (z [][]stri
 
 			switch {
 			case pretty:
-				l = s.MapKey(key.Name)
+				l = s.mapKey(key.Name)
 			default:
-				l = m + s.MapKey(key.Name)
+				l = m + s.mapKey(key.Name)
 			}
 
 			z = append(z, []string{
@@ -95,11 +95,12 @@ func (s *Specs) Table(data any, pretty bool, a int, label ...string) (z [][]stri
 		}
 	}
 
-	return
+	return z
 }
 
-// MapKey Translate key names to be more intuitive.
-func (*Specs) MapKey(f string) string {
+// mapKey
+// Translate key names to be more intuitive.
+func (*Specs) mapKey(f string) string {
 	// This map is unsafe.
 	// Two children of different parents may have the same field name.
 	m := map[string]string{

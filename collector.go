@@ -4,14 +4,15 @@ package main
 
 import (
 	"os/user"
+	"regexp"
 	"strings"
 
 	"github.com/StackExchange/wmi"
 	"golang.org/x/sys/windows/registry"
 )
 
-// Specs Field order matters here,
-//
+// Specs
+// Field order matters here.
 // Embedded type names doesn't get processed as parent when being marshaled.
 // These tags override it.
 type Specs struct {
@@ -24,25 +25,27 @@ type Specs struct {
 	GPUs        `json:"GPUs"        yaml:"gpus"        toml:"GPUs"`
 	Memory      `json:"Memory"      yaml:"memory"      toml:"Memory"`
 	Disks       `json:"Disks"       yaml:"disks"       toml:"Disks"`
+	NetAdapters `json:"NetAdapters" yaml:"netadapters" toml:"NetAdapters"`
 }
 
-// Windows Following the designation of System > About menu.
+// Windows
+// Following the designation of System > About menu.
 type Windows struct {
 	CSName             string `json:"DeviceName" yaml:"devicename" toml:"DeviceName"`
 	Caption            string `json:"Edition"    yaml:"edition"    toml:"Edition"`
 	Version            string
 	BuildNumber        string
 	SerialNumber       string
-	OriginalProductKey string
 	InstallDate        WinInstallDate
 	RegisteredUser     string
+	OriginalProductKey string
 }
 
 type WinInstallDate string
 
 type CurrentUser struct {
 	Username string
-	Realname string
+	Fullname string
 	SID      string
 }
 
@@ -110,7 +113,8 @@ type GPU struct {
 	AdapterDACType       string `json:"Type" yaml:"type" toml:"Type"`
 }
 
-// BBS A helper type
+// BBS
+// A helper type
 type BBS struct {
 	BIOS
 	Baseboard
@@ -137,6 +141,14 @@ type System struct {
 	SKU          string
 }
 
+type NetAdapters []NetAdapter
+
+type NetAdapter struct {
+	Name         string
+	MACAddress   string
+	Manufacturer string
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Specs
 ////////////////////////////////////////////////////////////////////////////////
@@ -144,44 +156,69 @@ type System struct {
 func (s *Specs) Collect() (err error) {
 
 	// Collect current Windows info
-	if err = s.Windows.Collect(); err != nil {
+	if err = s.Windows.collect(); err != nil {
 		return err
 	}
 
 	// Collect current user info
-	if err = s.CurrentUser.Collect(); err != nil {
+	if err = s.CurrentUser.collect(); err != nil {
 		return err
 	}
 
 	// Collect CPU info
-	if err = s.CPUs.Collect(); err != nil {
+	if err = s.CPUs.collect(); err != nil {
 		return err
 	}
 
 	// Collect memory info
-	if err = s.Memory.Collect(); err != nil {
+	if err = s.Memory.collect(); err != nil {
 		return err
 	}
 
 	// Collect disks info
-	if err = s.Disks.Collect(); err != nil {
+	if err = s.Disks.collect(); err != nil {
 		return err
 	}
 
 	// Collect GPUs info
-	err = s.GPUs.Collect()
+	err = s.GPUs.collect()
 	if err != nil {
 		return err
 	}
 
+	// Collect network adapters info
+	if err = s.NetAdapters.collect(); err != nil {
+		return err
+	}
+
 	// Collect BIOS info
-	//bbs := &BBS{} // GCed
 	var bbs BBS
-	if err = bbs.Collect(); err != nil {
+	if err = bbs.collect(); err != nil {
 		return err
 	}
 
 	s.BIOS, s.Baseboard, s.System = bbs.BIOS, bbs.Baseboard, bbs.System
+
+	return nil
+}
+
+func (w *Windows) CollectProductKey() error {
+	var k []struct {
+		OA3xOriginalProductKey string
+	}
+
+	err := wmi.Query(
+		"SELECT OA3xOriginalProductKey FROM SoftwareLicensingService",
+		&k)
+	if err != nil {
+		return err
+	}
+
+	if k[0].OA3xOriginalProductKey != "" {
+		w.OriginalProductKey = k[0].OA3xOriginalProductKey
+	} else {
+		w.OriginalProductKey = "N/A"
+	}
 
 	return nil
 }
@@ -218,7 +255,7 @@ func (r *RegistryReader) GetStringValue(name string) (string, error) {
 // CPU
 ////////////////////////////////////////////////////////////////////////////////
 
-func (c *CPUs) Collect() error {
+func (c *CPUs) collect() error {
 	err := wmi.Query(
 		"SELECT Name, SocketDesignation, NumberOfCores, ThreadCount,"+
 			"L2CacheSize, L3CacheSize, MaxClockSpeed "+
@@ -227,6 +264,7 @@ func (c *CPUs) Collect() error {
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -234,7 +272,7 @@ func (c *CPUs) Collect() error {
 // GPU
 ////////////////////////////////////////////////////////////////////////////////
 
-func (g *GPUs) Collect() error {
+func (g *GPUs) collect() error {
 	err := wmi.Query(
 		"SELECT Name, AdapterCompatibility, AdapterDACType "+
 			"FROM Win32_VideoController",
@@ -242,6 +280,17 @@ func (g *GPUs) Collect() error {
 	if err != nil {
 		return err
 	}
+
+	// Handle empty string values
+	for _, s := range *g {
+		if s.AdapterCompatibility == "" {
+			s.AdapterCompatibility = "N/A"
+		}
+		if s.AdapterDACType == "" {
+			s.AdapterDACType = "N/A"
+		}
+	}
+
 	return nil
 }
 
@@ -249,7 +298,7 @@ func (g *GPUs) Collect() error {
 // Memory
 ////////////////////////////////////////////////////////////////////////////////
 
-func (m *Memory) Collect() error {
+func (m *Memory) collect() error {
 	err := wmi.Query(
 		"SELECT DeviceLocator, BankLabel, SMBIOSMemoryType, Speed, Capacity, "+
 			//"TypeDetail, Manufacturer, PartNumber, SerialNumber " + // not needed for now
@@ -267,6 +316,19 @@ func (m *Memory) Collect() error {
 		m.DIMMs[i].PartNumber = strings.TrimSpace(m.DIMMs[i].PartNumber)
 	}
 
+	// Handle empty string values
+	for _, s := range m.DIMMs {
+		if s.Manufacturer == "" {
+			s.Manufacturer = "N/A"
+		}
+		if s.PartNumber == "" {
+			s.PartNumber = "N/A"
+		}
+		if s.SerialNumber == "" {
+			s.SerialNumber = "N/A"
+		}
+	}
+
 	return nil
 }
 
@@ -274,12 +336,50 @@ func (m *Memory) Collect() error {
 // Disks
 ////////////////////////////////////////////////////////////////////////////////
 
-func (d *Disks) Collect() error {
+func (d *Disks) collect() error {
 	err := wmi.Query(
 		"SELECT Model, Size, SerialNumber, Status FROM Win32_DiskDrive", d)
 	if err != nil {
 		return err
 	}
+
+	// Handle empty string values
+	for _, s := range *d {
+		if s.Model == "" {
+			s.Model = "N/A"
+		}
+		if s.SerialNumber == "" {
+			s.SerialNumber = "N/A"
+		}
+	}
+
+	return nil
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Network Adapters
+////////////////////////////////////////////////////////////////////////////////
+
+func (n *NetAdapters) collect() error {
+	err := wmi.Query(
+		"SELECT Name, MACAddress, Manufacturer FROM Win32_NetworkAdapter "+
+			"WHERE Manufacturer <> 'Microsoft'",
+		n)
+	if err != nil {
+		return err
+	}
+
+	virtAdapters := regexp.MustCompile(`(?i)(Windows|OpenVPN|WireGuard|Oracle|Fortinet)`)
+	realAdapters := (*n)[:0] // same capacity as *n, no reallocation
+
+	for _, v := range *n {
+		// Add adapter to realAdapters if not matches virtAdapter
+		if !virtAdapters.MatchString(v.Manufacturer) {
+			realAdapters = append(realAdapters, v)
+		}
+	}
+	*n = realAdapters
+
 	return nil
 }
 
@@ -287,13 +387,13 @@ func (d *Disks) Collect() error {
 // Current User
 ////////////////////////////////////////////////////////////////////////////////
 
-func (u *CurrentUser) Collect() error {
+func (u *CurrentUser) collect() error {
 	v, err := user.Current()
 	if err != nil {
 		return err
 	}
 
-	u.Username, u.Realname, u.SID = v.Username, v.Name, v.Uid
+	u.Username, u.Fullname, u.SID = v.Username, v.Name, v.Uid
 
 	return nil
 }
@@ -302,7 +402,7 @@ func (u *CurrentUser) Collect() error {
 // Windows info
 ////////////////////////////////////////////////////////////////////////////////
 
-func (w *Windows) Collect() error {
+func (w *Windows) collect() error {
 
 	// Collect main Windows info
 	var v []struct {
@@ -352,35 +452,19 @@ func (w *Windows) Collect() error {
 	return nil
 }
 
-func (w *Windows) CollectProductKey() error {
-	var k []struct {
-		OA3xOriginalProductKey string
-	}
-
-	err := wmi.Query(
-		"SELECT OA3xOriginalProductKey FROM SoftwareLicensingService",
-		&k)
-	if err != nil {
-		return err
-	}
-
-	w.OriginalProductKey = k[0].OA3xOriginalProductKey
-
-	return nil
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // BIOS, Baseboard, System (BBS)
 ////////////////////////////////////////////////////////////////////////////////
 
-func (b *BBS) Collect() error {
+func (b *BBS) collect() error {
 	reg, err := NewRegistryReader(`HARDWARE\Description\System\BIOS`)
 
 	if err != nil {
 		return err
 	}
 	defer func(Key registry.Key) {
-		if err := Key.Close(); err != nil {
+		err := Key.Close()
+		if err != nil {
 			return
 		}
 	}(reg.Key)
@@ -389,55 +473,88 @@ func (b *BBS) Collect() error {
 	if err != nil {
 		return err
 	}
+	if b.BIOS.Vendor == "" {
+		b.BIOS.Vendor = "N/A"
+	}
 
 	b.BIOS.Version, err = reg.GetStringValue("BIOSVersion")
 	if err != nil {
 		return err
+	}
+	if b.BIOS.Version == "" {
+		b.BIOS.Version = "N/A"
 	}
 
 	b.BIOS.ReleaseDate, err = reg.GetStringValue("BIOSReleaseDate")
 	if err != nil {
 		return err
 	}
+	if b.BIOS.ReleaseDate == "" {
+		b.BIOS.ReleaseDate = "N/A"
+	}
 
 	b.Baseboard.Manufacturer, err = reg.GetStringValue("BaseBoardManufacturer")
 	if err != nil {
 		return err
+	}
+	if b.Baseboard.Manufacturer == "" {
+		b.Baseboard.Manufacturer = "N/A"
 	}
 
 	b.Baseboard.Product, err = reg.GetStringValue("BaseBoardProduct")
 	if err != nil {
 		return err
 	}
+	if b.Baseboard.Product == "" {
+		b.Baseboard.Product = "N/A"
+	}
 
 	b.Baseboard.Version, err = reg.GetStringValue("BaseBoardVersion")
 	if err != nil {
 		return err
+	}
+	if b.Baseboard.Version == "" {
+		b.Baseboard.Version = "N/A"
 	}
 
 	b.System.Manufacturer, err = reg.GetStringValue("SystemManufacturer")
 	if err != nil {
 		return err
 	}
+	if b.System.Manufacturer == "" {
+		b.System.Manufacturer = "N/A"
+	}
 
 	b.System.Family, err = reg.GetStringValue("SystemFamily")
 	if err != nil {
 		return err
+	}
+	if b.System.Family == "" {
+		b.System.Family = "N/A"
 	}
 
 	b.System.Version, err = reg.GetStringValue("SystemVersion")
 	if err != nil {
 		return err
 	}
+	if b.System.Version == "" {
+		b.System.Version = "N/A"
+	}
 
 	b.System.ProductName, err = reg.GetStringValue("SystemProductName")
 	if err != nil {
 		return err
 	}
+	if b.System.ProductName == "" {
+		b.System.ProductName = "N/A"
+	}
 
 	b.System.SKU, err = reg.GetStringValue("SystemSKU")
 	if err != nil {
 		return err
+	}
+	if b.System.SKU == "" {
+		b.System.SKU = "N/A"
 	}
 
 	return nil

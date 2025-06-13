@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 )
 
 func main() {
@@ -84,7 +85,7 @@ func main() {
 	// Handle absent and "naked" or invalid args
 	case selectedAction == "", len(flag.Args()) > 0:
 		flag.Usage()
-		return
+		os.Exit(1)
 
 	// Print version
 	case selectedAction == "version":

@@ -83,7 +83,7 @@ func (d DIMMCapacity) String() string {
 // See: https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_3.4.0.pdf
 // Table 78
 func (d DIMMTypeDetail) String() (s string) {
-	// Not needed, as Windows runs only on Synchronous memory
+	// Not needed, as Windows can run only on Synchronous memory.
 	// Bit 7 --> Synchronous
 	//switch d>>7 - 128 {
 	//case 1:
@@ -103,7 +103,6 @@ func (d DIMMTypeDetail) String() (s string) {
 	default:
 		s += "unknown"
 	}
-	//returnfmt.Sprintf("%d", d>>7 - 128 )
 	return s
 }
 //*/

@@ -9,7 +9,7 @@ import (
 func (s *Specs) TextPretty(delim ...string) (out string) {
 	tbl := s.Table(s, true, 0)
 
-	const w = 22 // first column wdith
+	const w = 22 // first column width
 
 	d := ": " // default column delimiter
 	if len(delim) > 0 {
@@ -25,13 +25,13 @@ func (s *Specs) TextPretty(delim ...string) (out string) {
 		}
 	}
 
-	return
+	return out
 }
 
 func (s *Specs) TextFlat(delim ...string) (out string) {
 	tbl := s.Table(s, false, 0)
 
-	const w = 28 // first column wdith
+	const w = 28 // first column width
 
 	d := ": " // default column delimiter
 	if len(delim) > 0 {
@@ -42,7 +42,7 @@ func (s *Specs) TextFlat(delim ...string) (out string) {
 		out += fmt.Sprintf("%-*s%s%s\n", w, col[0], d, col[1])
 	}
 
-	return
+	return out
 }
 
 func (s *Specs) TextVCSV(delimQuote ...string) (out string) {
@@ -60,7 +60,7 @@ func (s *Specs) TextVCSV(delimQuote ...string) (out string) {
 		out += q + col[0] + q + d + q + col[1] + q + "\n"
 	}
 
-	return
+	return out
 }
 
 func (s *Specs) TextCSV(delimQuote ...string) (out string) {
@@ -90,6 +90,5 @@ func (s *Specs) TextCSV(delimQuote ...string) (out string) {
 		}
 	}
 
-	return
+	return out
 }
-

@@ -1,11 +1,12 @@
 #   Win Specs Reporter
 
 A quick and portable tool for Windows inventory audit,
-it comprises of two tiny tools:
+it consists of two tiny tools:
 
 1.  A launcher to show computer specs as a web page in the browser.
 
-    The web page nicely fits an ISO A4 paper for printing,
+    For typical specs,
+	the web page nicely fits an ISO A4 paper for printing,
     either as PDF or on plain paper.
     Always include background when printing!
 
@@ -37,7 +38,7 @@ it comprises of two tiny tools:
 2.  Install `rsrc`,
 
     ```shell
-    go get github.com/akavel/rsrc ; go install github.com/akavel/rsrc
+    $rsrc = "github.com/akavel/rsrc" ; go get $rsrc ; go install $rsrc
     ```
 
 3.  Run the Makefile,
@@ -111,5 +112,6 @@ or manually add the following to your `.vscode/settings.json`,
 
 ##  TODO
 
-- [ ]   Feature: send specs data to Google Sheets.
+- [ ]   Add test.
+- [ ]   Feature: send specs data to Google Sheets from CLI.
 

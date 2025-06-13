@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	// "syscall"
 	"time"
 )
 
@@ -70,7 +69,7 @@ var t = tag{
 	},
 }
 
-func (s *Specs) HTMLBody() (out string) {
+func (s *Specs) genHTMLBody() (out string) {
 	table := s.Table(s, true, 0)
 	leads := regexp.MustCompile(`^\s+`)
 	level := []*regexp.Regexp{
@@ -138,7 +137,7 @@ func (s *Specs) HTMLBody() (out string) {
 	out += t.table.end + "\n"
 	out += t.section.end
 
-	return
+	return out
 }
 
 //go:embed assets/html.tmpl
@@ -155,9 +154,9 @@ var favicon []byte
 
 var htmlTimestamp = time.Now()
 
-func (s *Specs) HTMLFull() (string, error) {
+func (s *Specs) genHTMLFull() (string, error) {
 	htmlData := map[string]any{
-		"body":      template.HTML(s.HTMLBody()),
+		"body":      template.HTML(s.genHTMLBody()),
 		"css":       template.CSS(htmlCSS),
 		"js":        template.JS(htmlJS),
 		"icon":      base64.StdEncoding.EncodeToString(favicon),
@@ -167,7 +166,7 @@ func (s *Specs) HTMLFull() (string, error) {
 
 	t := template.Must(template.New("htmlpage").Parse(htmlTmpl))
 
-	// Apply template and collect to buff
+	// Apply template and buffer to buff
 	var buff bytes.Buffer
 	err := t.Execute(&buff, htmlData)
 	if err != nil {
@@ -177,37 +176,37 @@ func (s *Specs) HTMLFull() (string, error) {
 	return buff.String(), nil
 }
 
-func (s *Specs) HTMLOpen() error {
+func (s *Specs) WriteHTML() (filename string, err error) {
 	re := regexp.MustCompile(`([^\\]+)\\([^\\]+)`)
 
 	userAtHost := re.ReplaceAllString(s.CurrentUser.Username, "$2@$1")
 	timestamp := htmlTimestamp.Format("20060102T150405-0700")
-	filename := userAtHost + "_" + timestamp + ".html"
 
-	t, err := s.HTMLFull()
+	filename = userAtHost + "_" + timestamp + ".html"
+
+	t, err := s.genHTMLFull()
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Write the HTML file.
 	// Permission 600 will make it readonly.
 	if err = os.WriteFile(filename, []byte(t), 700); err != nil {
-		return err
+		return "", err
 	}
 
-	// May be unnecessary.
-	// If file creation fails, it should already be handled above,
-	// and this checking will never run.
+	return filename, nil
+}
+
+func (s *Specs) OpenHTML(filename string) error {
+	// Check if filename exists
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		return err
 	}
-
 	// Open the HTML file with the default browser.
 	cmd := exec.Command("rundll32", "url.dll,FileProtocolHandler", filename)
-	// cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	if err := cmd.Run(); err != nil {
 		return err
 	}
-
 	return nil
 }

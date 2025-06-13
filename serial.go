@@ -93,7 +93,8 @@ func (d DIMMType) MarshalTOML() ([]byte, error) {
 	return toml.Marshal(d.String())
 }
 
-// MarshalJSON Minde the int64() to prevent stack overflow
+// MarshalJSON
+// Mind the int64() to prevent stack overflow
 func (d DIMMCapacity) MarshalJSON() ([]byte, error) {
 	return json.Marshal(int64(d) / units.GiB)
 }
