@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/StackExchange/wmi"
+	"github.com/yusufpapurcu/wmi"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/windows/registry"
+	//"github.com/StackExchange/wmi"
 	//"github.com/microsoft/wmi/go/wmi"
 )
 
