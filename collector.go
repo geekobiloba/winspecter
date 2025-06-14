@@ -3,16 +3,20 @@
 package main
 
 import (
+	"context"
 	"os/user"
 	"strings"
+	"time"
 
 	"github.com/StackExchange/wmi"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/windows/registry"
+	//"github.com/microsoft/wmi/go/wmi"
 )
 
 // Specs
 // Field order matters here.
-// Embedded type names doesn't get processed as parent when being marshaled.
+// Embedded type names don't get processed as parent when being marshaled.
 // These tags override it.
 type Specs struct {
 	CurrentUser `json:"CurrentUser" yaml:"currentuser" toml:"CurrentUser"`
@@ -148,51 +152,43 @@ type NetAdapter struct {
 	Manufacturer string
 }
 
+const wmiTimeout = 5 * time.Second
+
 ////////////////////////////////////////////////////////////////////////////////
-// Specs
+// Public Methods
 ////////////////////////////////////////////////////////////////////////////////
 
 func (s *Specs) Collect() (err error) {
+	bbs := &BBS{}
+	ctx := context.Background()
+	g, _ := errgroup.WithContext(ctx)
 
-	// Collect current Windows info
-	if err = s.Windows.collect(); err != nil {
-		return err
-	}
+	g.Go(func() error {
+		return s.Windows.collect()
+	})
+	g.Go(func() error {
+		return s.CurrentUser.collect()
+	})
+	g.Go(func() error {
+		return s.CPUs.collect()
+	})
+	g.Go(func() error {
+		return s.GPUs.collect()
+	})
+	g.Go(func() error {
+		return s.Memory.collect()
+	})
+	g.Go(func() error {
+		return s.Disks.collect()
+	})
+	g.Go(func() error {
+		return s.NetAdapters.collect()
+	})
+	g.Go(func() error {
+		return bbs.collect()
+	})
 
-	// Collect current user info
-	if err = s.CurrentUser.collect(); err != nil {
-		return err
-	}
-
-	// Collect CPU info
-	if err = s.CPUs.collect(); err != nil {
-		return err
-	}
-
-	// Collect memory info
-	if err = s.Memory.collect(); err != nil {
-		return err
-	}
-
-	// Collect disks info
-	if err = s.Disks.collect(); err != nil {
-		return err
-	}
-
-	// Collect GPUs info
-	err = s.GPUs.collect()
-	if err != nil {
-		return err
-	}
-
-	// Collect network adapters info
-	if err = s.NetAdapters.collect(); err != nil {
-		return err
-	}
-
-	// Collect BIOS info
-	var bbs BBS
-	if err = bbs.collect(); err != nil {
+	if err := g.Wait(); err != nil {
 		return err
 	}
 
@@ -206,11 +202,23 @@ func (w *Windows) CollectProductKey() error {
 		OA3xOriginalProductKey string
 	}
 
-	err := wmi.Query(
-		"SELECT OA3xOriginalProductKey FROM SoftwareLicensingService",
-		&k)
-	if err != nil {
-		return err
+	ctx, cancel := context.WithTimeout(context.Background(), wmiTimeout)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- wmi.Query(
+			"SELECT OA3xOriginalProductKey FROM SoftwareLicensingService",
+			&k)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-done:
+		if err != nil {
+			return err
+		}
 	}
 
 	if k[0].OA3xOriginalProductKey != "" {
@@ -222,9 +230,9 @@ func (w *Windows) CollectProductKey() error {
 	return nil
 }
 
-////////////////////////////////////////////////////////////////////////////////
+//******************************************************************************
 // Registry Reader
-////////////////////////////////////////////////////////////////////////////////
+//******************************************************************************
 
 type RegistryReader struct {
 	Key registry.Key
@@ -255,13 +263,25 @@ func (r *RegistryReader) GetStringValue(name string) (string, error) {
 ////////////////////////////////////////////////////////////////////////////////
 
 func (c *CPUs) collect() error {
-	err := wmi.Query(
-		"SELECT Name, SocketDesignation, NumberOfCores, ThreadCount,"+
-			"L2CacheSize, L3CacheSize, MaxClockSpeed "+
-			"FROM Win32_Processor",
-		c)
-	if err != nil {
-		return err
+	ctx, cancel := context.WithTimeout(context.Background(), wmiTimeout)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- wmi.Query(
+			"SELECT Name, SocketDesignation, NumberOfCores, ThreadCount, "+
+				"L2CacheSize, L3CacheSize, MaxClockSpeed "+
+				"FROM Win32_Processor",
+			c)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-done:
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -272,21 +292,33 @@ func (c *CPUs) collect() error {
 ////////////////////////////////////////////////////////////////////////////////
 
 func (g *GPUs) collect() error {
-	err := wmi.Query(
-		"SELECT Name, AdapterCompatibility, AdapterDACType "+
-			"FROM Win32_VideoController",
-		g)
-	if err != nil {
-		return err
+	ctx, cancel := context.WithTimeout(context.Background(), wmiTimeout)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- wmi.Query(
+			"SELECT Name, AdapterCompatibility, AdapterDACType "+
+				"FROM Win32_VideoController",
+			g)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-done:
+		if err != nil {
+			return err
+		}
 	}
 
-	// Handle empty string values
-	for _, s := range *g {
-		if s.AdapterCompatibility == "" {
-			s.AdapterCompatibility = "N/A"
+	// Handle empty string
+	for i := range *g {
+		if (*g)[i].AdapterCompatibility == "" {
+			(*g)[i].AdapterCompatibility = "N/A"
 		}
-		if s.AdapterDACType == "" {
-			s.AdapterDACType = "N/A"
+		if (*g)[i].AdapterDACType == "" {
+			(*g)[i].AdapterDACType = "N/A"
 		}
 	}
 
@@ -298,14 +330,26 @@ func (g *GPUs) collect() error {
 ////////////////////////////////////////////////////////////////////////////////
 
 func (m *Memory) collect() error {
-	err := wmi.Query(
-		"SELECT DeviceLocator, BankLabel, SMBIOSMemoryType, Speed, Capacity, "+
-			//"TypeDetail, Manufacturer, PartNumber, SerialNumber " + // not needed for now
-			"Manufacturer, PartNumber, SerialNumber "+
-			"FROM Win32_PhysicalMemory",
-		&m.DIMMs)
-	if err != nil {
-		return err
+	ctx, cancel := context.WithTimeout(context.Background(), wmiTimeout)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- wmi.Query(
+			"SELECT DeviceLocator, BankLabel, SMBIOSMemoryType, Speed, Capacity, "+
+				//"TypeDetail, Manufacturer, PartNumber, SerialNumber " + // not needed for now
+				"Manufacturer, PartNumber, SerialNumber "+
+				"FROM Win32_PhysicalMemory",
+			&m.DIMMs)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-done:
+		if err != nil {
+			return err
+		}
 	}
 
 	for i := range m.DIMMs {
@@ -315,16 +359,16 @@ func (m *Memory) collect() error {
 		m.DIMMs[i].PartNumber = strings.TrimSpace(m.DIMMs[i].PartNumber)
 	}
 
-	// Handle empty string values
-	for _, s := range m.DIMMs {
-		if s.Manufacturer == "" {
-			s.Manufacturer = "N/A"
+	// Handle empty string
+	for i := range m.DIMMs {
+		if m.DIMMs[i].Manufacturer == "" {
+			m.DIMMs[i].Manufacturer = "N/A"
 		}
-		if s.PartNumber == "" {
-			s.PartNumber = "N/A"
+		if m.DIMMs[i].PartNumber == "" {
+			m.DIMMs[i].PartNumber = "N/A"
 		}
-		if s.SerialNumber == "" {
-			s.SerialNumber = "N/A"
+		if m.DIMMs[i].SerialNumber == "" {
+			m.DIMMs[i].SerialNumber = "N/A"
 		}
 	}
 
@@ -336,19 +380,32 @@ func (m *Memory) collect() error {
 ////////////////////////////////////////////////////////////////////////////////
 
 func (d *Disks) collect() error {
-	err := wmi.Query(
-		"SELECT Model, Size, SerialNumber, Status FROM Win32_DiskDrive", d)
-	if err != nil {
-		return err
+	ctx, cancel := context.WithTimeout(context.Background(), wmiTimeout)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- wmi.Query(
+			"SELECT Model, Size, SerialNumber, Status FROM Win32_DiskDrive",
+			d)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-done:
+		if err != nil {
+			return err
+		}
 	}
 
-	// Handle empty string values
-	for _, s := range *d {
-		if s.Model == "" {
-			s.Model = "N/A"
+	// Handle empty string
+	for i := range *d {
+		if (*d)[i].Model == "" {
+			(*d)[i].Model = "N/A"
 		}
-		if s.SerialNumber == "" {
-			s.SerialNumber = "N/A"
+		if (*d)[i].SerialNumber == "" {
+			(*d)[i].SerialNumber = "N/A"
 		}
 	}
 
@@ -360,14 +417,27 @@ func (d *Disks) collect() error {
 ////////////////////////////////////////////////////////////////////////////////
 
 func (n *NetAdapters) collect() error {
-	err := wmi.Query(
-		"SELECT Name, MACAddress, Manufacturer FROM Win32_NetworkAdapter "+
-			"WHERE Manufacturer <> 'Microsoft'",
-		n)
-	if err != nil {
-		return err
+	ctx, cancel := context.WithTimeout(context.Background(), wmiTimeout)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- wmi.Query(
+			"SELECT Name, MACAddress, Manufacturer FROM Win32_NetworkAdapter "+
+				"WHERE Manufacturer <> 'Microsoft'",
+			n)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-done:
+		if err != nil {
+			return err
+		}
 	}
 
+	realAdapters := (*n)[:0] // same capacity as *n, no reallocation
 	virtAdapters := []string{
 		"windows",
 		"openvpn",
@@ -375,7 +445,6 @@ func (n *NetAdapters) collect() error {
 		"oracle",
 		"fortinet",
 	}
-	realAdapters := (*n)[:0] // same capacity as *n, no reallocation
 
 outer:
 	for _, v := range *n {
@@ -413,8 +482,8 @@ func (u *CurrentUser) collect() error {
 ////////////////////////////////////////////////////////////////////////////////
 
 func (w *Windows) collect() error {
-
-	// Collect main Windows info
+	// wmi.Query receiver struct must have exact fields as the queried ones,
+	// so here's a temporary struct to hold the results.
 	var v []struct {
 		CSName         string
 		Caption        string
@@ -424,13 +493,25 @@ func (w *Windows) collect() error {
 		RegisteredUser string
 	}
 
-	err := wmi.Query(
-		"SELECT Caption, BuildNumber, SerialNumber, CSName, InstallDate,"+
-			"RegisteredUser "+
-			"FROM Win32_OperatingSystem",
-		&v)
-	if err != nil {
-		return err
+	ctx, cancel := context.WithTimeout(context.Background(), wmiTimeout)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- wmi.Query(
+			"SELECT Caption, BuildNumber, SerialNumber, CSName, InstallDate,"+
+				"RegisteredUser "+
+				"FROM Win32_OperatingSystem",
+			&v)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-done:
+		if err != nil {
+			return err
+		}
 	}
 
 	*w = Windows{
@@ -440,10 +521,10 @@ func (w *Windows) collect() error {
 		SerialNumber:       v[0].SerialNumber,
 		InstallDate:        v[0].InstallDate,
 		RegisteredUser:     v[0].RegisteredUser,
-		OriginalProductKey: "***********", // default; handled by its own method
+		OriginalProductKey: "***********", // default when is not requested
 	}
 
-	// Collect Windows feature update version, e.g. 24H2
+	// Collect Windows feature update version, e.g., 24H2
 	reg, err := NewRegistryReader(`SOFTWARE\Microsoft\Windows NT\CurrentVersion`)
 	if err != nil {
 		return err
