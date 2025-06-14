@@ -52,6 +52,7 @@ it consists of two tiny tools:
 The source uses custom build tags: `cli` and `gui`.
 So, you need to configure your editor to recognize them.
 
+<!--
 >   [!TIP]
 >   With Neovim and VS Code,
 >   ignore `gopls` complaint about "main redeclared in this block"
@@ -59,6 +60,7 @@ So, you need to configure your editor to recognize them.
 >
 >   GoLand, on the other hand, stays cool about it,
 >   and correctly recognizes the separate mains.
+-->
 
 ### Neovim
 

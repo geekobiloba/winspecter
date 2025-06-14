@@ -1,10 +1,5 @@
 //go:build windows && gui
 
-////go:build windows && gui && ignored
-
-// The ignored tag above is only to fool gopls from complaining
-// that main is redeclared here.
-
 package main
 
 import (
@@ -13,7 +8,7 @@ import (
 	"syscall"
 )
 
-func main() {
+func init() {
 	var s Specs
 	if err := s.Collect(); err != nil {
 		errorBox(err)
