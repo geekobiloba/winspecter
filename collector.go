@@ -4,7 +4,6 @@ package main
 
 import (
 	"os/user"
-	"regexp"
 	"strings"
 
 	"github.com/StackExchange/wmi"
@@ -369,14 +368,25 @@ func (n *NetAdapters) collect() error {
 		return err
 	}
 
-	virtAdapters := regexp.MustCompile(`(?i)(Windows|OpenVPN|WireGuard|Oracle|Fortinet)`)
+	virtAdapters := []string{
+		"windows",
+		"openvpn",
+		"wireguard",
+		"oracle",
+		"fortinet",
+	}
 	realAdapters := (*n)[:0] // same capacity as *n, no reallocation
 
+outer:
 	for _, v := range *n {
-		// Add adapter to realAdapters if not matches virtAdapter
-		if !virtAdapters.MatchString(v.Manufacturer) {
-			realAdapters = append(realAdapters, v)
+		m := strings.ToLower(v.Manufacturer)
+
+		for _, w := range virtAdapters {
+			if strings.Contains(m, w) {
+				continue outer
+			}
 		}
+		realAdapters = append(realAdapters, v)
 	}
 	*n = realAdapters
 
